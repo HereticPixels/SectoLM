@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="fr" class="h-full bg-slate-950 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Secto CDS - Suivi des Visites</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#0369a1',
+                            900: '#0c4a6e',
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Font Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS (XLSX) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #090d16; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+        .glass-card {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glass-card-hover {
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .glass-card-hover:hover {
+            transform: translateY(-2px);
+            border-color: rgba(56, 189, 248, 0.35);
+            box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.6);
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col bg-slate-950 text-slate-100 antialiased selection:bg-sky-500 selection:text-white">
+
+    <!-- Top Navigation Header -->
+    <header class="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 px-4 lg:px-8 py-3">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+            
+            <!-- Logo & Title -->
+            <div class="flex items-center space-x-3">
+                <div class="p-2.5 bg-gradient-to-tr from-sky-600 to-indigo-600 rounded-xl shadow-lg shadow-sky-500/20">
+                    <i data-lucide="map-pin" class="w-6 h-6 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                        Secto Dashboard <span class="text-xs px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-400 font-semibold border border-sky-500/30">CDS Live</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Suivi & Optimisation des visites terrain</p>
+                </div>
+            </div>
+
+            <!-- Global Action Controls -->
+            <div class="flex items-center space-x-2.5 w-full sm:w-auto justify-end">
+                <button onclick="openImportModal()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 border border-slate-700/80 transition active:scale-95">
+                    <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-400"></i>
+                    <span>Importer Excel</span>
+                </button>
+
+                <button onclick="exportReport()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 border border-slate-700/80 transition active:scale-95">
+                    <i data-lucide="download" class="w-4 h-4 text-sky-400"></i>
+                    <span>Exporter</span>
+                </button>
+
+                <button onclick="promptResetSectorVisits()" class="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold flex items-center gap-1.5 border border-rose-500/30 transition active:scale-95">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                    <span class="hidden md:inline">Reset Secteur</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6 space-y-6">
+
+        <!-- Selector Control Bar (Secteur CDS + Enseignes) -->
+        <section class="glass-card rounded-2xl p-5 shadow-xl border border-slate-800/80">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+                
+                <!-- Sector Dropdown Selector -->
+                <div class="md:col-span-5 space-y-1.5">
+                    <label for="sectorSelect" class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <i data-lucide="user-check" class="w-3.5 h-3.5 text-sky-400"></i>
+                        Sélectionner le Secteur (CDS)
+                    </label>
+                    <div class="relative">
+                        <select id="sectorSelect" onchange="onSectorChange()" class="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent cursor-pointer appearance-none">
+                            <!-- Populated dynamically -->
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                            <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CDS / PA Info Badge -->
+                <div class="md:col-span-3 space-y-1.5">
+                    <label class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <i data-lucide="mail" class="w-3.5 h-3.5 text-indigo-400"></i>
+                        Responsable / PA
+                    </label>
+                    <div id="cdsInfoBox" class="bg-slate-900/80 border border-slate-800/80 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-300 truncate flex items-center gap-2">
+                        <span id="cdsEmailText" class="truncate">Chargement...</span>
+                    </div>
+                </div>
+
+                <!-- Brand Filter Multi-Select Pills -->
+                <div class="md:col-span-4 space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                            <i data-lucide="store" class="w-3.5 h-3.5 text-emerald-400"></i>
+                            Filtrer par Enseigne
+                        </label>
+                        <div class="space-x-2">
+                            <button onclick="selectAllBrands(true)" class="text-[11px] text-sky-400 hover:underline font-medium">Toutes</button>
+                            <span class="text-slate-600">|</span>
+                            <button onclick="selectAllBrands(false)" class="text-[11px] text-slate-400 hover:underline font-medium">Aucune</button>
+                        </div>
+                    </div>
+                    <div id="brandFilterContainer" class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                        <!-- Brand pills inserted dynamically -->
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- KPI Summary Cards Grid -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            <!-- KPI 1: Total Stores -->
+            <div class="glass-card glass-card-hover rounded-2xl p-5 border border-slate-800/80 relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Magasins</p>
+                        <h3 id="kpiTotalStores" class="text-3xl font-extrabold text-white mt-1">0</h3>
+                        <p class="text-[11px] text-slate-400 mt-1">sur le secteur sélectionné</p>
+                    </div>
+                    <div class="p-3 bg-slate-800/80 rounded-xl border border-slate-700/50 text-slate-300">
+                        <i data-lucide="building-2" class="w-6 h-6"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPI 2: Visited Stores -->
+            <div class="glass-card glass-card-hover rounded-2xl p-5 border border-slate-800/80 relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-emerald-400 uppercase tracking-wider">Magasins Visités</p>
+                        <h3 id="kpiVisitedStores" class="text-3xl font-extrabold text-emerald-400 mt-1">0</h3>
+                        <p class="text-[11px] text-emerald-500/80 mt-1 flex items-center gap-1">
+                            <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Visites validées
+                        </p>
+                    </div>
+                    <div class="p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-emerald-400">
+                        <i data-lucide="check-square" class="w-6 h-6"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPI 3: Remaining Stores -->
+            <div class="glass-card glass-card-hover rounded-2xl p-5 border border-slate-800/80 relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-amber-400 uppercase tracking-wider">Reste à Visiter</p>
+                        <h3 id="kpiRemainingStores" class="text-3xl font-extrabold text-amber-400 mt-1">0</h3>
+                        <p class="text-[11px] text-amber-500/80 mt-1 flex items-center gap-1">
+                            <i data-lucide="clock" class="w-3.5 h-3.5"></i> Action requise
+                        </p>
+                    </div>
+                    <div class="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20 text-amber-400">
+                        <i data-lucide="map-pin-off" class="w-6 h-6"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPI 4: Completion Gauge -->
+            <div class="glass-card glass-card-hover rounded-2xl p-5 border border-slate-800/80 relative overflow-hidden flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-medium text-sky-400 uppercase tracking-wider">% Réalisation</p>
+                    <h3 id="kpiPercentText" class="text-3xl font-extrabold text-sky-400 mt-1">0%</h3>
+                    <div class="w-28 bg-slate-800/80 h-2 rounded-full mt-2.5 overflow-hidden">
+                        <div id="kpiProgressBar" class="bg-gradient-to-r from-sky-500 to-emerald-400 h-full w-0 transition-all duration-500"></div>
+                    </div>
+                </div>
+                <!-- Mini Circular Badge -->
+                <div class="relative w-16 h-16 flex items-center justify-center">
+                    <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                        <path class="text-slate-800" stroke-width="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                        <path id="circleGaugePath" class="text-sky-400 transition-all duration-700 ease-out" stroke-dasharray="0, 100" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                    </svg>
+                    <i data-lucide="trophy" class="w-5 h-5 text-sky-400 absolute"></i>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Analytics & Brand Progression Charts Section -->
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Brand Progress Bar Breakdown -->
+            <div class="lg:col-span-7 glass-card rounded-2xl p-5 border border-slate-800/80 space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                    <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i data-lucide="bar-chart-3" class="w-4 h-4 text-sky-400"></i>
+                        Avancement des Visites par Enseigne
+                    </h2>
+                    <span class="text-xs text-slate-400">Progression en %</span>
+                </div>
+                <div id="brandProgressBarsContainer" class="space-y-3.5 max-h-64 overflow-y-auto pr-2">
+                    <!-- Progress bars rendered dynamically -->
+                </div>
+            </div>
+
+            <!-- Visited vs Remaining Chart -->
+            <div class="lg:col-span-5 glass-card rounded-2xl p-5 border border-slate-800/80 flex flex-col justify-between">
+                <div class="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                    <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i data-lucide="pie-chart" class="w-4 h-4 text-emerald-400"></i>
+                        Répartition du Secteur
+                    </h2>
+                    <span id="completionBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">En cours</span>
+                </div>
+                <div class="relative flex items-center justify-center my-2 h-48">
+                    <canvas id="statusChart"></canvas>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Store List Table Section -->
+        <section class="glass-card rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl">
+            
+            <!-- Table Action Header Bar -->
+            <div class="p-5 border-b border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/40">
+                
+                <!-- Status Filter Tabs -->
+                <div class="flex items-center bg-slate-950/80 p-1 rounded-xl border border-slate-800/80 self-start">
+                    <button id="tabAll" onclick="setStatusTab('all')" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition bg-sky-600 text-white shadow-sm">
+                        Tous (<span id="countTabAll">0</span>)
+                    </button>
+                    <button id="tabPending" onclick="setStatusTab('pending')" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-200 transition">
+                        À visiter (<span id="countTabPending">0</span>)
+                    </button>
+                    <button id="tabVisited" onclick="setStatusTab('visited')" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-200 transition">
+                        Visités (<span id="countTabVisited">0</span>)
+                    </button>
+                </div>
+
+                <!-- Search Input & Quick Filters -->
+                <div class="flex items-center gap-3 w-full md:w-auto">
+                    <div class="relative flex-1 md:w-72">
+                        <i data-lucide="search" class="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                        <input id="searchInput" type="text" oninput="onSearchInput()" placeholder="Rechercher magasin, ville, CP..." class="w-full bg-slate-950/90 border border-slate-800/80 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+
+                    <!-- Toggle View Mode Button (Table / Grid) -->
+                    <div class="flex items-center bg-slate-950/80 p-1 rounded-xl border border-slate-800/80">
+                        <button id="viewBtnTable" onclick="toggleViewMode('table')" class="p-1.5 rounded-lg text-sky-400 bg-slate-800/80">
+                            <i data-lucide="table" class="w-4 h-4"></i>
+                        </button>
+                        <button id="viewBtnGrid" onclick="toggleViewMode('grid')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-200">
+                            <i data-lucide="grid" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Table View -->
+            <div id="tableViewWrapper" class="overflow-x-auto">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead class="bg-slate-950/90 text-slate-400 uppercase font-semibold text-[11px] tracking-wider border-b border-slate-800/80 sticky top-0">
+                        <tr>
+                            <th class="py-3.5 px-4 text-center w-12">Statut</th>
+                            <th class="py-3.5 px-4">Magasin</th>
+                            <th class="py-3.5 px-4">Enseigne</th>
+                            <th class="py-3.5 px-4">Ville / CP</th>
+                            <th class="py-3.5 px-4">Adresse</th>
+                            <th class="py-3.5 px-4 text-center">Horodatage / Notes</th>
+                            <th class="py-3.5 px-4 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="storeTableBody" class="divide-y divide-slate-800/60 font-medium">
+                        <!-- Table rows populated dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Grid Card View (Alternative) -->
+            <div id="gridViewWrapper" class="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 hidden">
+                <!-- Grid cards populated dynamically -->
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="hidden py-16 text-center space-y-3">
+                <div class="w-12 h-12 bg-slate-800/80 text-slate-500 rounded-full flex items-center justify-center mx-auto">
+                    <i data-lucide="inbox" class="w-6 h-6"></i>
+                </div>
+                <p class="text-sm font-semibold text-slate-300">Aucun magasin ne correspond à vos critères</p>
+                <p class="text-xs text-slate-500">Essayez de modifier la recherche ou de sélectionner d'autres enseignes.</p>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Import Excel Modal -->
+    <div id="importModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="glass-card max-w-lg w-full rounded-2xl border border-slate-700/80 p-6 space-y-5 relative shadow-2xl">
+            <button onclick="closeImportModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+            <div class="flex items-center gap-3">
+                <div class="p-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl">
+                    <i data-lucide="file-up" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h3 class="text-base font-bold text-white">Importer le fichier Secto (.xlsx / .csv)</h3>
+                    <p class="text-xs text-slate-400">Mettez à jour vos secteurs et la liste des magasins</p>
+                </div>
+            </div>
+
+            <!-- Drag and Drop Area -->
+            <div id="dropZone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleFileDrop(event)" onclick="document.getElementById('fileInput').click()" class="border-2 border-dashed border-slate-700 hover:border-sky-500/60 bg-slate-900/60 rounded-xl p-8 text-center cursor-pointer transition space-y-3">
+                <i data-lucide="upload-cloud" class="w-10 h-10 text-sky-400 mx-auto"></i>
+                <div>
+                    <p class="text-xs font-semibold text-slate-200">Cliquez pour parcourir ou glissez le fichier ici</p>
+                    <p class="text-[11px] text-slate-500 mt-1">Formats acceptés : .xlsx, .xls, .csv</p>
+                </div>
+                <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" onchange="handleFileSelect(event)" class="hidden">
+            </div>
+
+            <div class="bg-slate-900/90 border border-slate-800/80 rounded-xl p-3 text-[11px] text-slate-400 space-y-1">
+                <p class="font-semibold text-slate-300">Normalisation automatique activée :</p>
+                <ul class="list-disc list-inside space-y-0.5">
+                    <li>Codes postaux corrigés sur 5 chiffres (ex. 08000, 02100)</li>
+                    <li>Villes unifiées (ex. AIX, AIX PIOLINE, AIX EN PRO &rarr; AIX-EN-PROVENCE)</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Note Edit Modal -->
+    <div id="noteModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="glass-card max-w-md w-full rounded-2xl border border-slate-700/80 p-6 space-y-4 relative shadow-2xl">
+            <button onclick="closeNoteModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+            <h3 id="noteModalStoreName" class="text-sm font-bold text-white">Ajouter un commentaire de visite</h3>
+            <textarea id="noteInput" rows="4" placeholder="Compte-rendu de visite, interlocuteur, besoins..." class="w-full bg-slate-950 border border-slate-700/80 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500"></textarea>
+            <div class="flex justify-end gap-2">
+                <button onclick="closeNoteModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 rounded-lg transition">Annuler</button>
+                <button onclick="saveStoreNote()" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-xs font-semibold text-white rounded-lg transition">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Dialog Modal (Replaces browser confirm) -->
+    <div id="confirmModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="glass-card max-w-md w-full rounded-2xl border border-slate-700/80 p-6 space-y-4 relative shadow-2xl">
+            <div class="flex items-center gap-3">
+                <div id="confirmIconContainer" class="p-2.5 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl">
+                    <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h3 id="confirmTitle" class="text-sm font-bold text-white">Confirmation</h3>
+                    <p id="confirmMessage" class="text-xs text-slate-300 mt-0.5">Êtes-vous sûr de vouloir effectuer cette action ?</p>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button id="confirmBtnCancel" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 rounded-lg transition">Annuler</button>
+                <button id="confirmBtnOk" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white rounded-lg transition">Confirmer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast System -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <script>
+        // Initial Dataset fallback with realistic data from user file
+        const INITIAL_STORES = [
+            // Secteur 04_LILLE
+            { id: "FR2378", brand: "BUREAU VALLEE FR", sector: "04_LILLE", name: "Bureau Vallee FR - ABBEVILLE", address: "1 Rue Jules Verne", cp: "80100", city: "ABBEVILLE", pa: "aline.rigaut@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR417", brand: "BUREAU VALLEE FR", sector: "04_LILLE", name: "Bureau Vallee FR - AMIENS-CENTRE", address: "8, Rue Henri Barbusse", cp: "80000", city: "AMIENS-CENTRE", pa: "aline.rigaut@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR2392", brand: "BUREAU VALLEE FR", sector: "04_LILLE", name: "Bureau Vallee FR - ARRAS", address: "13 bis Bd Robert Schuman", cp: "62000", city: "ARRAS", pa: "aline.rigaut@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR2396", brand: "BUREAU VALLEE FR", sector: "04_LILLE", name: "Bureau Vallee FR - BAILLEUL", address: "Parc du, Rte de Steenwerck", cp: "59270", city: "BAILLEUL", pa: "aline.rigaut@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR2400", brand: "BUREAU VALLEE FR", sector: "04_LILLE", name: "Bureau Vallee FR - BERCK SUR MER", address: "Bd de Paris", cp: "62600", city: "BERCK SUR MER", pa: "aline.rigaut@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR395", brand: "BUREAU VALLEE FR", sector: "04_LILLE", name: "Bureau Vallee FR - BETHUNE", address: "Zone actipolis n°2 - Le prieuré Saint Pry", cp: "62232", city: "BETHUNE", pa: "aline.rigaut@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR394", brand: "BUREAU VALLEE FR", sector: "04_LILLE", name: "Bureau Vallee FR - BOULOGNE SUR MER", address: "63, Avenue John Kennedy", cp: "62200", city: "BOULOGNE SUR MER", pa: "aline.rigaut@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR2408", brand: "BUREAU VALLEE FR", sector: "04_LILLE", name: "Bureau Vallee FR - CALAIS", address: "Zone Commerciale du, Chem. Vert", cp: "62100", city: "CALAIS", pa: "aline.rigaut@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR2410", brand: "BUREAU VALLEE FR", sector: "04_LILLE", name: "Bureau Vallee FR - CAMBRAI", address: "Av. de Paris", cp: "59400", city: "CAMBRAI", pa: "aline.rigaut@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR2451", brand: "BUREAU VALLEE FR", sector: "04_LILLE", name: "Bureau Vallee FR - LILLE", address: "18 Rue d'Amiens", cp: "59800", city: "LILLE", pa: "aline.rigaut@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR372", brand: "BOULANGER FR", sector: "04_LILLE", name: "BOULANGER FR - F770 - FOURMIES", address: "ZAC de la Marlière", cp: "59610", city: "FOURMIES", pa: "aline.rigaut@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR720", brand: "FNAC DARTY FR", sector: "04_LILLE", name: "FNAC DARTY FR - DARTY - LENS", address: "Avenue Van Pelt", cp: "62300", city: "LENS", pa: "aline.rigaut@cpm-int.com", status: "COUVERTURE OK" },
+
+            // Secteur 03_MARSEILLE / PROVENCE
+            { id: "FR762", brand: "FNAC DARTY FR", sector: "03_MARSEILLE", name: "FNAC DARTY FR - DARTY - AIX", address: "ZAC De La Pioline, Rue Pierre Leydet", cp: "13290", city: "AIX-EN-PROVENCE", pa: "marc.dupond@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR763", brand: "FNAC DARTY FR", sector: "03_MARSEILLE", name: "FNAC DARTY FR - FNAC - AIX EN PROVENCE", address: "Les Allées Provençales, 160 Av. Giuseppe Verdi", cp: "13100", city: "AIX-EN-PROVENCE", pa: "marc.dupond@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR764", brand: "METRO FR", sector: "03_MARSEILLE", name: "METRO FR - MCCF 146 AIX EN PROVENCE", address: "944 Rue de la Gare", cp: "13770", city: "AIX-EN-PROVENCE", pa: "marc.dupond@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR813", brand: "FNAC DARTY FR", sector: "03_MARSEILLE", name: "Fnac Darty FR - DARTY - MENTON", address: "2 Rue Guyau", cp: "06500", city: "MENTON", pa: "marc.dupond@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR559", brand: "BOULANGER FR", sector: "03_MARSEILLE", name: "BOULANGER FR - F559 - AIX EN PRO", address: "6 B Av. des Belges", cp: "13100", city: "AIX-EN-PROVENCE", pa: "marc.dupond@cpm-int.com", status: "COUVERTURE OK" },
+
+            // Secteur 01_PARIS
+            { id: "FR456", brand: "BOULANGER FR", sector: "01_PARIS", name: "BOULANGER FR - F121 - P ROSAPARK", address: "179, Boulevard Macdonald", cp: "75019", city: "PARIS", pa: "sophie.martin@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR465", brand: "BOULANGER FR", sector: "01_PARIS", name: "BOULANGER FR - F530 - LEVALLOIS", address: "Centre commercial SO Ouest", cp: "92300", city: "LEVALLOIS", pa: "sophie.martin@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR575", brand: "FNAC DARTY FR", sector: "01_PARIS", name: "FNAC DARTY FR - DARTY - ORGEVAL", address: "Centre Commercial WHITE PARC", cp: "78670", city: "ORGEVAL", pa: "sophie.martin@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR580", brand: "FNAC DARTY FR", sector: "01_PARIS", name: "FNAC DARTY FR - DARTY - VILLEBON", address: "Aushopping Villebon 2", cp: "91140", city: "VILLEBON", pa: "sophie.martin@cpm-int.com", status: "COUVERTURE OK" },
+
+            // Secteur 05_BORDEAUX
+            { id: "FR198", brand: "BUREAU VALLEE FR", sector: "05_BORDEAUX", name: "Bureau Vallee FR - BORDEAUX-ST MEDARD", address: "165 avenue du général de Gaulle", cp: "33160", city: "BORDEAUX", pa: "julien.bernard@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR208", brand: "BUREAU VALLEE FR", sector: "05_BORDEAUX", name: "Bureau Vallee FR - DAX-ST PAUL LES DAX", address: "3 Avenue de la Liberté", cp: "40990", city: "DAX", pa: "julien.bernard@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR266", brand: "FNAC DARTY FR", sector: "05_BORDEAUX", name: "FNAC DARTY FR - DARTY - DAX", address: "Centre Commercial Grand Mail 2", cp: "40990", city: "DAX", pa: "julien.bernard@cpm-int.com", status: "COUVERTURE OK" },
+            { id: "FR380", brand: "BUREAU VALLEE FR", sector: "05_BORDEAUX", name: "Bureau Vallee FR - ROCHEFORT", address: "14 Rue Villeneuve Montigny", cp: "17300", city: "ROCHEFORT", pa: "julien.bernard@cpm-int.com", status: "COUVERTURE OK" }
+        ];
+
+        // Application State
+        let allStores = [];
+        let currentSector = "";
+        let selectedBrands = new Set();
+        let currentStatusTab = "all"; // 'all', 'pending', 'visited'
+        let currentViewMode = "table"; // 'table', 'grid'
+        let activeNoteStoreId = null;
+
+        // LocalStorage keys
+        const STORAGE_KEY_STORES = "secto_app_stores_data_v2";
+        const STORAGE_KEY_VISITS = "secto_app_visit_states_v2";
+
+        // Chart instance
+        let statusChartInstance = null;
+
+        // City normalization helper
+        function normalizeCity(cityStr) {
+            if (!cityStr || typeof cityStr !== 'string') return "";
+            let c = cityStr.trim().toUpperCase();
+            
+            if (c.startsWith("C ") && c.length > 3) c = c.substring(2).trim();
+            if (c.startsWith("BV ") && c.length > 4) c = c.substring(3).trim();
+
+            c = c.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+            c = c.replace(/\bST\b/g, "SAINT")
+                 .replace(/\bSTE\b/g, "SAINTE")
+                 .replace(/\bDS\b/g, "DANS");
+
+            if (['AIX', 'AIX EN PRO', 'AIX PIOLINE', 'AIX-PIOLINE', 'AIX EN PROVENCE', 'AIX-EN-PROVENCE'].includes(c)) {
+                return 'AIX-EN-PROVENCE';
+            }
+            return c.replace(/\s+/g, " ");
+        }
+
+        function normalizePostalCode(cpVal) {
+            if (cpVal === null || cpVal === undefined) return "";
+            let str = String(cpVal).trim().replace(/\.0$/, '');
+            if (!str) return "";
+            return str.padStart(5, '0');
+        }
+
+        function normalizeBrandName(col1Str, magNameStr) {
+            if (col1Str && typeof col1Str === 'string' && col1Str.trim()) {
+                return col1Str.trim().toUpperCase();
+            }
+            if (magNameStr && magNameStr.includes('-')) {
+                return magNameStr.split('-')[0].trim().toUpperCase();
+            }
+            return "AUTRE";
+        }
+
+        // Load data on startup
+        function initApp() {
+            const savedStores = localStorage.getItem(STORAGE_KEY_STORES);
+            if (savedStores) {
+                try {
+                    allStores = JSON.parse(savedStores);
+                } catch(e) {
+                    allStores = [...INITIAL_STORES];
+                }
+            } else {
+                allStores = [...INITIAL_STORES];
+            }
+
+            const visitStates = getVisitStates();
+            allStores.forEach(s => {
+                if (visitStates[s.id]) {
+                    s.visited = visitStates[s.id].visited || false;
+                    s.visitedAt = visitStates[s.id].visitedAt || null;
+                    s.notes = visitStates[s.id].notes || "";
+                } else {
+                    s.visited = s.visited || false;
+                    s.visitedAt = s.visitedAt || null;
+                    s.notes = s.notes || "";
+                }
+            });
+
+            populateSectorDropdown();
+            lucide.createIcons();
+        }
+
+        function getVisitStates() {
+            try {
+                return JSON.parse(localStorage.getItem(STORAGE_KEY_VISITS) || "{}");
+            } catch(e) {
+                return {};
+            }
+        }
+
+        function saveVisitState(storeId, isVisited, notes = null) {
+            const visitStates = getVisitStates();
+            if (!visitStates[storeId]) visitStates[storeId] = {};
+            
+            visitStates[storeId].visited = isVisited;
+            if (isVisited && !visitStates[storeId].visitedAt) {
+                visitStates[storeId].visitedAt = new Date().toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+            } else if (!isVisited) {
+                visitStates[storeId].visitedAt = null;
+            }
+
+            if (notes !== null) {
+                visitStates[storeId].notes = notes;
+            }
+
+            localStorage.setItem(STORAGE_KEY_VISITS, JSON.stringify(visitStates));
+
+            const store = allStores.find(s => s.id === storeId);
+            if (store) {
+                store.visited = isVisited;
+                store.visitedAt = visitStates[storeId].visitedAt;
+                if (notes !== null) store.notes = notes;
+            }
+
+            checkSectorCompletion();
+            renderDashboard();
+        }
+
+        function populateSectorDropdown() {
+            const sectorSelect = document.getElementById('sectorSelect');
+            const sectors = [...new Set(allStores.map(s => s.sector))].sort();
+
+            sectorSelect.innerHTML = "";
+            sectors.forEach(sec => {
+                const opt = document.createElement('option');
+                opt.value = sec;
+                opt.textContent = `Secteur ${sec}`;
+                sectorSelect.appendChild(opt);
+            });
+
+            if (sectors.length > 0) {
+                currentSector = sectors[0];
+                sectorSelect.value = currentSector;
+            }
+
+            onSectorChange();
+        }
+
+        function onSectorChange() {
+            const sectorSelect = document.getElementById('sectorSelect');
+            currentSector = sectorSelect.value;
+
+            const storeInSec = allStores.find(s => s.sector === currentSector && s.pa);
+            const emailText = storeInSec ? storeInSec.pa : "Non attribué";
+            document.getElementById('cdsEmailText').textContent = emailText;
+
+            populateBrandFilters();
+            renderDashboard();
+        }
+
+        function populateBrandFilters() {
+            const container = document.getElementById('brandFilterContainer');
+            container.innerHTML = "";
+
+            const sectorStores = allStores.filter(s => s.sector === currentSector);
+            const brands = [...new Set(sectorStores.map(s => s.brand))].sort();
+
+            // Select all by default if empty or sector changed
+            if (selectedBrands.size === 0) {
+                selectedBrands = new Set(brands);
+            }
+
+            brands.forEach(brand => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                const isSelected = selectedBrands.has(brand);
+                btn.className = `brand-pill px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition flex items-center gap-1.5 ${
+                    isSelected
+                        ? 'bg-sky-500/20 text-sky-300 border-sky-500/40 shadow-sm'
+                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700'
+                }`;
+                btn.onclick = () => toggleBrandFilter(brand);
+                btn.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-sky-400' : 'bg-slate-600'}"></span> ${brand}`;
+                container.appendChild(btn);
+            });
+        }
+
+        function toggleBrandFilter(brand) {
+            if (selectedBrands.has(brand)) {
+                selectedBrands.delete(brand);
+            } else {
+                selectedBrands.add(brand);
+            }
+            populateBrandFilters();
+            renderDashboard();
+        }
+
+        function selectAllBrands(select) {
+            const sectorStores = allStores.filter(s => s.sector === currentSector);
+            const brands = [...new Set(sectorStores.map(s => s.brand))];
+            if (select) {
+                selectedBrands = new Set(brands);
+            } else {
+                selectedBrands.clear();
+            }
+            populateBrandFilters();
+            renderDashboard();
+        }
+
+        function renderDashboard() {
+            const sectorStores = allStores.filter(s => s.sector === currentSector && selectedBrands.has(s.brand));
+            
+            const total = sectorStores.length;
+            const visited = sectorStores.filter(s => s.visited).length;
+            const remaining = total - visited;
+            const percent = total > 0 ? Math.round((visited / total) * 100) : 0;
+
+            document.getElementById('kpiTotalStores').textContent = total;
+            document.getElementById('kpiVisitedStores').textContent = visited;
+            document.getElementById('kpiRemainingStores').textContent = remaining;
+            document.getElementById('kpiPercentText').textContent = `${percent}%`;
+
+            document.getElementById('kpiProgressBar').style.width = `${percent}%`;
+            document.getElementById('circleGaugePath').setAttribute('stroke-dasharray', `${percent}, 100`);
+
+            const badge = document.getElementById('completionBadge');
+            if (percent === 100 && total > 0) {
+                badge.textContent = "100% Terminé !";
+                badge.className = "text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold animate-pulse-slow";
+            } else {
+                badge.textContent = "En cours";
+                badge.className = "text-xs px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 font-semibold";
+            }
+
+            renderBrandProgressBars(sectorStores);
+            renderStatusChart(visited, remaining);
+            renderStoreList(sectorStores);
+        }
+
+        function renderBrandProgressBars(sectorStores) {
+            const container = document.getElementById('brandProgressBarsContainer');
+            container.innerHTML = "";
+
+            const brands = [...new Set(sectorStores.map(s => s.brand))];
+
+            if (brands.length === 0) {
+                container.innerHTML = `<p class="text-xs text-slate-500 py-4 text-center">Aucune enseigne sélectionnée</p>`;
+                return;
+            }
+
+            brands.forEach(brand => {
+                const bStores = sectorStores.filter(s => s.brand === brand);
+                const bTotal = bStores.length;
+                const bVisited = bStores.filter(s => s.visited).length;
+                const bPct = bTotal > 0 ? Math.round((bVisited / bTotal) * 100) : 0;
+
+                const row = document.createElement('div');
+                row.className = "space-y-1";
+                row.innerHTML = `
+                    <div class="flex justify-between text-xs font-semibold">
+                        <span class="text-slate-300 truncate max-w-[200px]">${brand}</span>
+                        <span class="text-slate-400">${bVisited}/${bTotal} <span class="text-sky-400 font-bold ml-1">(${bPct}%)</span></span>
+                    </div>
+                    <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
+                        <div class="bg-gradient-to-r from-sky-500 to-emerald-400 h-full transition-all duration-500 rounded-full" style="width: ${bPct}%"></div>
+                    </div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        function renderStatusChart(visited, remaining) {
+            const ctx = document.getElementById('statusChart').getContext('2d');
+            
+            if (statusChartInstance) {
+                statusChartInstance.destroy();
+            }
+
+            if (visited === 0 && remaining === 0) {
+                return;
+            }
+
+            statusChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Visités', 'Reste à visiter'],
+                    datasets: [{
+                        data: [visited, remaining],
+                        backgroundColor: ['#10b981', '#f59e0b'],
+                        borderColor: '#0f172a',
+                        borderWidth: 3,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#94a3b8',
+                                font: { family: 'Inter', size: 11, weight: '600' },
+                                padding: 15,
+                                usePointStyle: true,
+                                pointStyle: 'circle'
+                            }
+                        }
+                    },
+                    cutout: '70%'
+                }
+            });
+        }
+
+        function renderStoreList(sectorStores) {
+            const searchVal = document.getElementById('searchInput').value.trim().toLowerCase();
+            
+            let list = sectorStores.filter(s => {
+                if (currentStatusTab === 'pending' && s.visited) return false;
+                if (currentStatusTab === 'visited' && !s.visited) return false;
+
+                if (searchVal) {
+                    const haystack = `${s.name} ${s.city} ${s.cp} ${s.brand} ${s.address} ${s.id}`.toLowerCase();
+                    return haystack.includes(searchVal);
+                }
+                return true;
+            });
+
+            document.getElementById('countTabAll').textContent = sectorStores.length;
+            document.getElementById('countTabPending').textContent = sectorStores.filter(s => !s.visited).length;
+            document.getElementById('countTabVisited').textContent = sectorStores.filter(s => s.visited).length;
+
+            const tbody = document.getElementById('storeTableBody');
+            const gridView = document.getElementById('gridViewWrapper');
+            const emptyState = document.getElementById('emptyState');
+
+            tbody.innerHTML = "";
+            gridView.innerHTML = "";
+
+            if (list.length === 0) {
+                emptyState.classList.remove('hidden');
+                document.getElementById('tableViewWrapper').classList.add('hidden');
+                gridView.classList.add('hidden');
+                return;
+            } else {
+                emptyState.classList.add('hidden');
+                if (currentViewMode === 'table') {
+                    document.getElementById('tableViewWrapper').classList.remove('hidden');
+                    gridView.classList.add('hidden');
+                } else {
+                    document.getElementById('tableViewWrapper').classList.add('hidden');
+                    gridView.classList.remove('hidden');
+                }
+            }
+
+            list.forEach(store => {
+                const tr = document.createElement('tr');
+                tr.className = `hover:bg-slate-800/40 transition border-b border-slate-800/50 ${store.visited ? 'bg-emerald-950/10' : ''}`;
+
+                const gmapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(store.name + " " + store.address + " " + store.cp + " " + store.city)}`;
+
+                tr.innerHTML = `
+                    <td class="py-3 px-4 text-center">
+                        <input type="checkbox" ${store.visited ? 'checked' : ''} onchange="toggleStoreVisit('${store.id}', this.checked)" class="w-4 h-4 rounded text-sky-500 bg-slate-900 border-slate-700 focus:ring-sky-500 cursor-pointer">
+                    </td>
+                    <td class="py-3 px-4">
+                        <div class="font-bold text-slate-100 flex items-center gap-2">
+                            ${store.name}
+                            ${store.visited ? '<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-semibold border border-emerald-500/30">FAIT</span>' : ''}
+                        </div>
+                        <div class="text-[11px] text-slate-400 font-mono">Code: ${store.id}</div>
+                    </td>
+                    <td class="py-3 px-4">
+                        <span class="px-2 py-1 rounded-md bg-slate-800/80 text-slate-300 font-semibold text-[11px] border border-slate-700/80">
+                            ${store.brand}
+                        </span>
+                    </td>
+                    <td class="py-3 px-4">
+                        <div class="font-bold text-sky-400">${store.city}</div>
+                        <div class="text-[11px] text-slate-400 font-mono">${store.cp}</div>
+                    </td>
+                    <td class="py-3 px-4 text-slate-300 max-w-xs truncate" title="${store.address}">
+                        ${store.address || '-'}
+                    </td>
+                    <td class="py-3 px-4 text-center">
+                        ${store.visitedAt ? `<div class="text-[11px] text-emerald-400 font-semibold flex items-center justify-center gap-1"><i data-lucide="clock" class="w-3 h-3"></i> ${store.visitedAt}</div>` : '<span class="text-slate-500 italic text-[11px]">En attente</span>'}
+                        ${store.notes ? `<div class="text-[10px] text-slate-300 italic truncate max-w-[150px] mx-auto mt-0.5" title="${store.notes}">"${store.notes}"</div>` : ''}
+                    </td>
+                    <td class="py-3 px-4 text-right">
+                        <div class="flex items-center justify-end gap-1.5">
+                            <button onclick="openNoteModal('${store.id}')" title="Ajouter / modifier note" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+                                <i data-lucide="message-square" class="w-3.5 h-3.5"></i>
+                            </button>
+                            <a href="${gmapsUrl}" target="_blank" title="Itinéraire Google Maps" class="p-1.5 rounded-lg bg-slate-800 hover:bg-sky-900/50 text-sky-400 transition">
+                                <i data-lucide="navigation" class="w-3.5 h-3.5"></i>
+                            </a>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+
+                const card = document.createElement('div');
+                card.className = `glass-card rounded-xl p-4 border transition flex flex-col justify-between space-y-3 ${store.visited ? 'border-emerald-500/40 bg-emerald-950/10' : 'border-slate-800'}`;
+                card.innerHTML = `
+                    <div class="flex items-start justify-between gap-2">
+                        <div>
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 uppercase">${store.brand}</span>
+                            <h4 class="text-sm font-bold text-white mt-1.5 leading-tight">${store.name}</h4>
+                            <p class="text-xs text-sky-400 font-semibold mt-0.5">${store.city} (${store.cp})</p>
+                        </div>
+                        <input type="checkbox" ${store.visited ? 'checked' : ''} onchange="toggleStoreVisit('${store.id}', this.checked)" class="w-5 h-5 rounded text-sky-500 bg-slate-900 border-slate-700 focus:ring-sky-500 cursor-pointer mt-1">
+                    </div>
+                    <p class="text-xs text-slate-400 truncate" title="${store.address}">${store.address}</p>
+                    ${store.notes ? `<p class="text-xs text-amber-300/90 bg-amber-500/10 border border-amber-500/20 p-2 rounded-lg italic font-normal">"${store.notes}"</p>` : ''}
+                    <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
+                        <span class="text-[11px] text-slate-500">${store.visitedAt ? store.visitedAt : 'Non visité'}</span>
+                        <div class="flex gap-1">
+                            <button onclick="openNoteModal('${store.id}')" class="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700">
+                                <i data-lucide="message-square" class="w-3.5 h-3.5"></i>
+                            </button>
+                            <a href="${gmapsUrl}" target="_blank" class="p-1.5 rounded-lg bg-slate-800 text-sky-400 hover:bg-sky-900/50">
+                                <i data-lucide="navigation" class="w-3.5 h-3.5"></i>
+                            </a>
+                        </div>
+                    </div>
+                `;
+                gridView.appendChild(card);
+            });
+
+            lucide.createIcons();
+        }
+
+        function toggleStoreVisit(storeId, isChecked) {
+            saveVisitState(storeId, isChecked);
+        }
+
+        function setStatusTab(tabName) {
+            currentStatusTab = tabName;
+            ['tabAll', 'tabPending', 'tabVisited'].forEach(t => {
+                const el = document.getElementById(t);
+                el.className = "px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-200 transition";
+            });
+
+            if (tabName === 'all') {
+                document.getElementById('tabAll').className = "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition bg-sky-600 text-white shadow-sm";
+            } else if (tabName === 'pending') {
+                document.getElementById('tabPending').className = "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition bg-amber-600 text-white shadow-sm";
+            } else if (tabName === 'visited') {
+                document.getElementById('tabVisited').className = "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition bg-emerald-600 text-white shadow-sm";
+            }
+
+            renderDashboard();
+        }
+
+        function toggleViewMode(mode) {
+            currentViewMode = mode;
+            if (mode === 'table') {
+                document.getElementById('viewBtnTable').className = "p-1.5 rounded-lg text-sky-400 bg-slate-800";
+                document.getElementById('viewBtnGrid').className = "p-1.5 rounded-lg text-slate-400 hover:text-slate-200";
+            } else {
+                document.getElementById('viewBtnGrid').className = "p-1.5 rounded-lg text-sky-400 bg-slate-800";
+                document.getElementById('viewBtnTable').className = "p-1.5 rounded-lg text-slate-400 hover:text-slate-200";
+            }
+            renderDashboard();
+        }
+
+        function onSearchInput() {
+            renderDashboard();
+        }
+
+        // Custom Alert Toast System (Replacing browser alert)
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            
+            const bgClass = type === 'success' ? 'bg-emerald-900/90 border-emerald-500/50 text-emerald-100' :
+                           type === 'error' ? 'bg-rose-900/90 border-rose-500/50 text-rose-100' :
+                           'bg-sky-900/90 border-sky-500/50 text-sky-100';
+
+            const icon = type === 'success' ? 'check-circle' : type === 'error' ? 'alert-circle' : 'info';
+
+            toast.className = `pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-xl border backdrop-blur-md shadow-2xl text-xs font-semibold transition-all duration-300 transform translate-y-2 opacity-0 ${bgClass}`;
+            toast.innerHTML = `<i data-lucide="${icon}" class="w-4 h-4 shrink-0"></i> <span>${message}</span>`;
+
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // Custom Confirm Dialog System (Replacing browser confirm)
+        function showConfirm({ title, message, okText = "Confirmer", cancelText = "Annuler", onConfirm, isDanger = false }) {
+            const modal = document.getElementById('confirmModal');
+            document.getElementById('confirmTitle').textContent = title;
+            document.getElementById('confirmMessage').textContent = message;
+
+            const okBtn = document.getElementById('confirmBtnOk');
+            const cancelBtn = document.getElementById('confirmBtnCancel');
+
+            okBtn.textContent = okText;
+            cancelBtn.textContent = cancelText;
+
+            if (isDanger) {
+                okBtn.className = "px-4 py-2 bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white rounded-lg transition";
+            } else {
+                okBtn.className = "px-4 py-2 bg-sky-600 hover:bg-sky-500 text-xs font-semibold text-white rounded-lg transition";
+            }
+
+            const cleanup = () => {
+                modal.classList.add('hidden');
+                okBtn.onclick = null;
+                cancelBtn.onclick = null;
+            };
+
+            okBtn.onclick = () => {
+                cleanup();
+                if (onConfirm) onConfirm();
+            };
+
+            cancelBtn.onclick = cleanup;
+            modal.classList.remove('hidden');
+        }
+
+        // Sector Reset Action
+        function promptResetSectorVisits() {
+            showConfirm({
+                title: "Réinitialiser le secteur",
+                message: `Voulez-vous réinitialiser toutes les visites enregistrées pour le secteur "${currentSector}" ?`,
+                okText: "Réinitialiser",
+                isDanger: true,
+                onConfirm: () => {
+                    const visitStates = getVisitStates();
+                    allStores.filter(s => s.sector === currentSector).forEach(s => {
+                        delete visitStates[s.id];
+                        s.visited = false;
+                        s.visitedAt = null;
+                        s.notes = "";
+                    });
+
+                    localStorage.setItem(STORAGE_KEY_VISITS, JSON.stringify(visitStates));
+                    showToast(`Secteur "${currentSector}" réinitialisé avec succès.`, 'success');
+                    renderDashboard();
+                }
+            });
+        }
+
+        function checkSectorCompletion() {
+            const sectorStores = allStores.filter(s => s.sector === currentSector && selectedBrands.has(s.brand));
+            if (sectorStores.length > 0 && sectorStores.every(s => s.visited)) {
+                confetti({
+                    particleCount: 120,
+                    spread: 80,
+                    origin: { y: 0.6 }
+                });
+
+                setTimeout(() => {
+                    showConfirm({
+                        title: "Secteur 100% Terminé ! 🎉",
+                        message: `Félicitations ! Tous les magasins du secteur "${currentSector}" ont été visités. Souhaitez-vous réinitialiser la tournée ?`,
+                        okText: "Nouvelle Tournée",
+                        cancelText: "Conserver",
+                        onConfirm: () => {
+                            const visitStates = getVisitStates();
+                            allStores.filter(s => s.sector === currentSector).forEach(s => {
+                                delete visitStates[s.id];
+                                s.visited = false;
+                                s.visitedAt = null;
+                                s.notes = "";
+                            });
+                            localStorage.setItem(STORAGE_KEY_VISITS, JSON.stringify(visitStates));
+                            renderDashboard();
+                        }
+                    });
+                }, 500);
+            }
+        }
+
+        /* Note Modal Logic */
+        function openNoteModal(storeId) {
+            activeNoteStoreId = storeId;
+            const store = allStores.find(s => s.id === storeId);
+            if (!store) return;
+
+            document.getElementById('noteModalStoreName').textContent = `Note : ${store.name}`;
+            document.getElementById('noteInput').value = store.notes || "";
+            document.getElementById('noteModal').classList.remove('hidden');
+        }
+
+        function closeNoteModal() {
+            document.getElementById('noteModal').classList.add('hidden');
+            activeNoteStoreId = null;
+        }
+
+        function saveStoreNote() {
+            if (!activeNoteStoreId) return;
+            const text = document.getElementById('noteInput').value.trim();
+            const store = allStores.find(s => s.id === activeNoteStoreId);
+            if (store) {
+                saveVisitState(activeNoteStoreId, store.visited, text);
+                showToast("Note enregistrée avec succès", "success");
+            }
+            closeNoteModal();
+        }
+
+        // Modal Excel Import Functions
+        function openImportModal() {
+            document.getElementById('importModal').classList.remove('hidden');
+        }
+
+        function closeImportModal() {
+            document.getElementById('importModal').classList.add('hidden');
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            document.getElementById('dropZone').classList.add('border-sky-500', 'bg-sky-950/20');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            document.getElementById('dropZone').classList.remove('border-sky-500', 'bg-sky-950/20');
+        }
+
+        function handleFileDrop(e) {
+            e.preventDefault();
+            handleDragLeave(e);
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                processExcelFile(e.dataTransfer.files[0]);
+            }
+        }
+
+        function handleFileSelect(e) {
+            if (e.target.files && e.target.files.length > 0) {
+                processExcelFile(e.target.files[0]);
+            }
+        }
+
+        function processExcelFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const jsonRows = XLSX.utils.sheet_to_json(worksheet);
+
+                    if (!jsonRows || jsonRows.length === 0) {
+                        showToast("Le fichier est vide ou illisible.", "error");
+                        return;
+                    }
+
+                    const parsedStores = jsonRows.map((row, idx) => {
+                        const magName = row['MAGASINS'] || row['magasin'] || row['Magasin'] || `Magasin_${idx+1}`;
+                        const brand = normalizeBrandName(row['Colonne1'] || row['ENSEIGNE'] || row['enseigne'], magName);
+                        const cp = normalizePostalCode(row['CODE POSTAL'] || row['code_postal'] || row['CP']);
+                        const city = normalizeCity(row['VILLE'] || row['ville']);
+                        
+                        return {
+                            id: String(row['FR'] || row['CODE'] || `MAG_${idx+1}`),
+                            brand: brand,
+                            sector: String(row['SECTEUR'] || row['secteur'] || '01_SECTEUR_DEFAULT').trim(),
+                            name: magName,
+                            address: row['ADRESSE'] || row['adresse'] || '',
+                            cp: cp,
+                            city: city,
+                            pa: row['PA AFFECTATION '] || row['PA AFFECTATION'] || row['pa'] || '',
+                            status: row['STATUS'] || row['status'] || 'OK',
+                            visited: false,
+                            visitedAt: null,
+                            notes: ""
+                        };
+                    });
+
+                    allStores = parsedStores;
+                    localStorage.setItem(STORAGE_KEY_STORES, JSON.stringify(allStores));
+
+                    const visitStates = getVisitStates();
+                    allStores.forEach(s => {
+                        if (visitStates[s.id]) {
+                            s.visited = visitStates[s.id].visited || false;
+                            s.visitedAt = visitStates[s.id].visitedAt || null;
+                            s.notes = visitStates[s.id].notes || "";
+                        }
+                    });
+
+                    populateSectorDropdown();
+                    closeImportModal();
+
+                    showToast(`Import réussi ! ${parsedStores.length} magasins chargés.`, "success");
+
+                } catch(err) {
+                    console.error(err);
+                    showToast("Erreur lors de la lecture du fichier Excel.", "error");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function exportReport() {
+            const sectorStores = allStores.filter(s => s.sector === currentSector);
+            
+            if (sectorStores.length === 0) {
+                showToast("Aucun magasin à exporter pour ce secteur.", "error");
+                return;
+            }
+
+            const exportData = sectorStores.map(s => ({
+                'ID': s.id,
+                'SECTEUR': s.sector,
+                'ENSEIGNE': s.brand,
+                'MAGASIN': s.name,
+                'ADRESSE': s.address,
+                'CODE POSTAL': s.cp,
+                'VILLE': s.city,
+                'STATUT VISITE': s.visited ? 'VISITÉ' : 'À VISITER',
+                'DATE VISITE': s.visitedAt || '',
+                'NOTES / OBSERVATIONS': s.notes || '',
+                'RESPONSABLE': s.pa
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Rapport Visites");
+
+            const fileName = `Rapport_Visites_${currentSector}_${new Date().toISOString().slice(0,10)}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            showToast("Export du rapport téléchargé avec succès.", "success");
+        }
+
+        // Initialize App on Window Load
+        window.onload = function() {
+            initApp();
+        };
+    </script>
+</body>
+</html>
+```
+
+### Synthèse des améliorations
+- **Zero Dialogues Natifs Browser** : Remplacement direct de toutes les fonctions `alert()` et `confirm()` par une modale de confirmation sur-mesure et un système Toast avec animations et icônes.
+- **Support complet Excel & Drag and Drop** : Traitement robuste des données XLSX/CSV avec gestion propre des clés et des valeurs.
+- **Rendu réactif** : Bascule dynamique entre vue Tableau et vue Cartes, filtrage instantané et mise à jour synchronisée du graphique Chart.js sans rechargement.
